@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/presentation/widgets/keza_bottom_nav.dart';
+import '../providers/habits_provider.dart';
 import '../widgets/habit_card.dart';
 import '../widgets/add_habit_sheet.dart';
 
@@ -15,6 +16,9 @@ class HabitsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final habits = ref.watch(habitsProvider);
+    final notifier = ref.read(habitsProvider.notifier);
+
     return Scaffold(
       backgroundColor: AppColors.midnightBackground,
       body: SafeArea(
@@ -24,12 +28,20 @@ class HabitsScreen extends ConsumerWidget {
               child: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(child: _buildHeader(context)),
-                  SliverToBoxAdapter(child: _buildSummary()),
+                  SliverToBoxAdapter(
+                    child: _buildSummary(
+                      notifier.completedCount,
+                      notifier.remainingCount,
+                      habits,
+                    ),
+                  ),
                   SliverToBoxAdapter(child: _buildSectionLabel('Today')),
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     sliver: SliverList(
-                      delegate: SliverChildListDelegate(_buildHabits()),
+                      delegate: SliverChildListDelegate(
+                        _buildHabitCards(habits, notifier),
+                      ),
                     ),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -96,7 +108,11 @@ class HabitsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSummary() {
+  Widget _buildSummary(int completed, int remaining, List habits) {
+    final bestStreak = habits.isEmpty
+        ? 0
+        : habits.map((h) => h.streak as int).reduce((a, b) => a > b ? a : b);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Container(
@@ -108,14 +124,14 @@ class HabitsScreen extends ConsumerWidget {
             color: AppColors.midnightTextMuted.withOpacity(0.15),
           ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _SummaryItem(value: '4', label: 'Completed'),
-            _Divider(),
-            _SummaryItem(value: '2', label: 'Remaining'),
-            _Divider(),
-            _SummaryItem(value: '7', label: 'Day streak'),
+            _SummaryItem(value: '$completed', label: 'Completed'),
+            const _Divider(),
+            _SummaryItem(value: '$remaining', label: 'Remaining'),
+            const _Divider(),
+            _SummaryItem(value: '$bestStreak', label: 'Best streak'),
           ],
         ),
       ),
@@ -137,56 +153,27 @@ class HabitsScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildHabits() {
-    return const [
-      HabitCard(
-        emoji: '🏃',
-        name: 'Morning run',
-        streak: 7,
-        isCompleted: true,
-        frequency: 'Daily',
-      ),
-      SizedBox(height: 12),
-      HabitCard(
-        emoji: '📖',
-        name: 'Read 20 pages',
-        streak: 5,
-        isCompleted: true,
-        frequency: 'Daily',
-      ),
-      SizedBox(height: 12),
-      HabitCard(
-        emoji: '💧',
-        name: 'Drink 2L water',
-        streak: 12,
-        isCompleted: true,
-        frequency: 'Daily',
-      ),
-      SizedBox(height: 12),
-      HabitCard(
-        emoji: '🧘',
-        name: 'Meditate',
-        streak: 3,
-        isCompleted: false,
-        frequency: 'Daily',
-      ),
-      SizedBox(height: 12),
-      HabitCard(
-        emoji: '✍️',
-        name: 'Journal entry',
-        streak: 12,
-        isCompleted: false,
-        frequency: 'Daily',
-      ),
-      SizedBox(height: 12),
-      HabitCard(
-        emoji: '💪',
-        name: 'Workout',
-        streak: 4,
-        isCompleted: false,
-        frequency: '3x per week',
-      ),
-    ];
+  List<Widget> _buildHabitCards(List habits, HabitsNotifier notifier) {
+    final widgets = <Widget>[];
+    for (var i = 0; i < habits.length; i++) {
+      final habit = habits[i];
+      widgets.add(
+        GestureDetector(
+          onTap: () => notifier.toggleCompletion(habit.id),
+          child: HabitCard(
+            emoji: habit.emoji,
+            name: habit.name,
+            streak: habit.streak,
+            isCompleted: habit.isCompletedToday,
+            frequency: habit.frequency,
+          ),
+        ),
+      );
+      if (i != habits.length - 1) {
+        widgets.add(const SizedBox(height: 12));
+      }
+    }
+    return widgets;
   }
 }
 

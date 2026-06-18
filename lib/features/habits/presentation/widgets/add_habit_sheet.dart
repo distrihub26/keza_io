@@ -2,19 +2,21 @@
 // KezaIO - Your private AI life advisor
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../features/auth/presentation/widgets/keza_text_field.dart';
 import '../../../../features/auth/presentation/widgets/keza_primary_button.dart';
+import '../providers/habits_provider.dart';
 
 /// Bottom sheet for adding a new habit.
-class AddHabitSheet extends StatefulWidget {
+class AddHabitSheet extends ConsumerStatefulWidget {
   const AddHabitSheet({super.key});
 
   @override
-  State<AddHabitSheet> createState() => _AddHabitSheetState();
+  ConsumerState<AddHabitSheet> createState() => _AddHabitSheetState();
 }
 
-class _AddHabitSheetState extends State<AddHabitSheet> {
+class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
   final _nameController = TextEditingController();
   String _selectedEmoji = '⭐';
   String _selectedFrequency = 'Daily';
@@ -42,8 +44,15 @@ class _AddHabitSheetState extends State<AddHabitSheet> {
   Future<void> _save() async {
     if (_nameController.text.trim().isEmpty) return;
     setState(() => _isSaving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
+
+    ref.read(habitsProvider.notifier).addHabit(
+          emoji: _selectedEmoji,
+          name: _nameController.text.trim(),
+          frequency: _selectedFrequency,
+        );
+
     Navigator.pop(context);
   }
 
