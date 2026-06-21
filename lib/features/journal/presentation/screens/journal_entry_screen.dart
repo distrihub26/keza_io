@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../providers/journal_provider.dart';
 
 /// Full-screen journal entry composer.
 class JournalEntryScreen extends ConsumerStatefulWidget {
@@ -18,6 +19,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
   final _controller = TextEditingController();
   String? _selectedMood;
   bool _isSaving = false;
+  String? _errorMessage;
 
   static const List<String> _moods = ['😊', '😔', '😤', '😌', '🤔', '😴', '🔥'];
 
@@ -29,11 +31,24 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
 
   Future<void> _save() async {
     if (_controller.text.trim().isEmpty) return;
-    setState(() => _isSaving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-    Navigator.pop(context);
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await ref.read(journalProvider.notifier).addEntry(
+            content: _controller.text.trim(),
+            mood: _selectedMood,
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (_) {
+      setState(() {
+        _errorMessage = "Couldn't save your entry. Please try again.";
+        _isSaving = false;
+      });
+    }
   }
 
   int get _wordCount {
@@ -50,6 +65,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
         child: Column(
           children: [
             _buildToolbar(),
+            if (_errorMessage != null) _buildErrorBanner(),
             _buildMoodSelector(),
             Expanded(child: _buildEditor()),
             _buildFooter(),
@@ -111,6 +127,23 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
                   ),
                 ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.danger.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          _errorMessage!,
+          style: const TextStyle(color: AppColors.danger, fontSize: 12),
+        ),
       ),
     );
   }

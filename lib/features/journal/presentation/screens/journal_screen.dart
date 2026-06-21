@@ -3,9 +3,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/presentation/widgets/keza_bottom_nav.dart';
+import '../../domain/models/journal_entry.dart';
+import '../providers/journal_provider.dart';
 import '../widgets/journal_entry_card.dart';
 import '../widgets/journal_mood_bar.dart';
 import 'journal_entry_screen.dart';
@@ -16,27 +19,22 @@ class JournalScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final journalState = ref.watch(journalProvider);
+
     return Scaffold(
       backgroundColor: AppColors.midnightBackground,
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildHeader(context)),
-                  SliverToBoxAdapter(child: _buildMoodBar()),
-                  SliverToBoxAdapter(child: _buildSectionLabel('Recent entries')),
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate(
-                        _buildEntries(),
-                      ),
-                    ),
+              child: journalState.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.midnightGold,
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                ],
+                ),
+                error: (_, __) => _buildError(context, ref),
+                data: (entries) => _buildContent(context, entries),
               ),
             ),
             const KezaBottomNav(currentIndex: 0),
@@ -44,14 +42,64 @@ class JournalScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: _NewEntryButton(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const JournalEntryScreen(),
-          ),
-        ),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const JournalEntryScreen(),
+            ),
+          );
+        },
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+    );
+  }
+
+  Widget _buildError(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            color: AppColors.midnightTextMuted,
+            size: 40,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "Couldn't load your journal",
+            style: TextStyle(
+              color: AppColors.midnightTextPrimary,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => ref.read(journalProvider.notifier).loadEntries(),
+            child: const Text(
+              'Try again',
+              style: TextStyle(color: AppColors.midnightGold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, List<JournalEntry> entries) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeader(context)),
+        SliverToBoxAdapter(child: _buildMoodBar()),
+        SliverToBoxAdapter(child: _buildSectionLabel('Recent entries')),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(_buildEntries(entries)),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
     );
   }
 
@@ -118,40 +166,59 @@ class JournalScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildEntries() {
-    return const [
-      JournalEntryCard(
-        date: 'Today, 8:21 AM',
-        preview: 'Woke up feeling clear. The morning run helped — '
-            'I need to do that more often. Had a good meeting...',
-        mood: '😊',
-        wordCount: 248,
-      ),
-      SizedBox(height: 12),
-      JournalEntryCard(
-        date: 'Yesterday, 10:45 PM',
-        preview: 'Long day. Felt overwhelmed by the project scope '
-            'but pushed through. Grateful for the small wins today...',
-        mood: '😔',
-        wordCount: 183,
-      ),
-      SizedBox(height: 12),
-      JournalEntryCard(
-        date: 'Mon, 14 Jun',
-        preview: 'Something shifted today. Had a conversation that '
-            'made me realise I have been holding back on the things...',
-        mood: '🤔',
-        wordCount: 312,
-      ),
-      SizedBox(height: 12),
-      JournalEntryCard(
-        date: 'Sun, 13 Jun',
-        preview: 'Rest day. Read half of the book. Made notes. '
-            'Feeling recharged and ready for the week ahead...',
-        mood: '😌',
-        wordCount: 97,
-      ),
-    ];
+  List<Widget> _buildEntries(List<JournalEntry> entries) {
+    if (entries.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              "No entries yet. Tap the pencil to write your first one.",
+              style: TextStyle(
+                color: AppColors.midnightTextMuted,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      widgets.add(
+        JournalEntryCard(
+          date: _formatDate(entry.createdAt),
+          preview: entry.preview,
+          mood: entry.mood ?? '📝',
+          wordCount: entry.wordCount,
+        ),
+      );
+      if (i != entries.length - 1) {
+        widgets.add(const SizedBox(height: 12));
+      }
+    }
+    return widgets;
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final isToday = date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+    final isYesterday = date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day - 1;
+
+    if (isToday) {
+      return 'Today, ${DateFormat('h:mm a').format(date)}';
+    }
+    if (isYesterday) {
+      return 'Yesterday, ${DateFormat('h:mm a').format(date)}';
+    }
+    return DateFormat('EEE, d MMM').format(date);
   }
 }
 
