@@ -13,7 +13,7 @@ class AppConstants {
   // API
   static const String baseUrl = String.fromEnvironment(
     'BASE_URL',
-    defaultValue: 'https://api.keza.io/v1',
+    defaultValue: 'http://192.168.8.100:8002/api/v1',
   );
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);

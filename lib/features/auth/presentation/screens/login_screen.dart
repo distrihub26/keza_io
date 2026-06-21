@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Jiamini Innovations Ltd. All rights reserved.
 // KezaIO - Your private AI life advisor
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/providers/auth_repository_provider.dart';
 import '../widgets/keza_text_field.dart';
 import '../widgets/keza_primary_button.dart';
 import '../widgets/keza_auth_header.dart';
@@ -26,6 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -36,11 +39,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    context.go(AppRoutes.home);
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final repository = ref.read(authRepositoryProvider);
+      final user = await repository.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      if (!user.isOnboarded) {
+        context.go(AppRoutes.onboarding);
+      } else {
+        context.go(AppRoutes.home);
+      }
+    } on DioException catch (e) {
+      setState(() {
+        _errorMessage = _parseError(e);
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Something went wrong. Please try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _parseError(DioException e) {
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout) {
+      return "Can't reach KezaIO. Check your connection and try again.";
+    }
+    final data = e.response?.data;
+    if (data is Map && data.containsKey('detail')) {
+      return data['detail'].toString();
+    }
+    return 'Invalid email or password.';
   }
 
   @override
@@ -61,6 +102,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   subtitle: 'Your private space is waiting for you.',
                 ),
                 const SizedBox(height: 40),
+                if (_errorMessage != null) ...[
+                  _ErrorBanner(message: _errorMessage!),
+                  const SizedBox(height: 16),
+                ],
                 KezaTextField(
                   controller: _emailController,
                   label: 'Email',
@@ -163,6 +208,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (value == null || value.isEmpty) return 'Password is required';
     if (value.length < 6) return 'Password must be at least 6 characters';
     return null;
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.danger,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.danger, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

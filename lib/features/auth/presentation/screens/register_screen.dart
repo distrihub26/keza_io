@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Jiamini Innovations Ltd. All rights reserved.
 // KezaIO - Your private AI life advisor
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/providers/auth_repository_provider.dart';
 import '../widgets/keza_text_field.dart';
 import '../widgets/keza_primary_button.dart';
 import '../widgets/keza_auth_header.dart';
@@ -30,6 +32,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscureConfirm = true;
   bool _isLoading = false;
   bool _agreedToTerms = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -43,23 +46,59 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_agreedToTerms) {
-      _showTermsError();
+      setState(() => _errorMessage = 'Please agree to the terms to continue.');
       return;
     }
-    setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    context.go(AppRoutes.onboarding);
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final repository = ref.read(authRepositoryProvider);
+      final email = _emailController.text.trim();
+      final username = email.split('@').first;
+
+      await repository.register(
+        email: email,
+        username: username,
+        password: _passwordController.text,
+        firstName: _nameController.text.trim(),
+      );
+
+      if (!mounted) return;
+      context.go(AppRoutes.onboarding);
+    } on DioException catch (e) {
+      setState(() => _errorMessage = _parseError(e));
+    } catch (e) {
+      setState(() => _errorMessage = 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
-  void _showTermsError() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Please agree to the terms to continue.'),
-        backgroundColor: AppColors.danger,
-      ),
-    );
+  String _parseError(DioException e) {
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout) {
+      return "Can't reach KezaIO. Check your connection and try again.";
+    }
+    final data = e.response?.data;
+    if (data is Map) {
+      if (data.containsKey('email')) {
+        return 'That email is already registered.';
+      }
+      if (data.containsKey('username')) {
+        return 'That username is taken. Try a different email.';
+      }
+      if (data.containsKey('password')) {
+        final errors = data['password'];
+        if (errors is List && errors.isNotEmpty) {
+          return errors.first.toString();
+        }
+      }
+    }
+    return 'Could not create your account. Please try again.';
   }
 
   @override
@@ -80,6 +119,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   subtitle: 'Private, personal, and entirely yours.',
                 ),
                 const SizedBox(height: 40),
+                if (_errorMessage != null) ...[
+                  _ErrorBanner(message: _errorMessage!),
+                  const SizedBox(height: 16),
+                ],
                 KezaTextField(
                   controller: _nameController,
                   label: 'Full name',
@@ -211,6 +254,40 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.danger,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.danger, fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }

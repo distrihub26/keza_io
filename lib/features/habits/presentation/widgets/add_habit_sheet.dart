@@ -21,6 +21,7 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
   String _selectedEmoji = '⭐';
   String _selectedFrequency = 'Daily';
   bool _isSaving = false;
+  String? _errorMessage;
 
   static const List<String> _emojis = [
     '⭐', '🏃', '📖', '💧', '🧘', '✍️', '💪',
@@ -43,17 +44,25 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
 
   Future<void> _save() async {
     if (_nameController.text.trim().isEmpty) return;
-    setState(() => _isSaving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
 
-    ref.read(habitsProvider.notifier).addHabit(
-          emoji: _selectedEmoji,
-          name: _nameController.text.trim(),
-          frequency: _selectedFrequency,
-        );
-
-    Navigator.pop(context);
+    try {
+      await ref.read(habitsProvider.notifier).addHabit(
+            emoji: _selectedEmoji,
+            name: _nameController.text.trim(),
+            frequency: _selectedFrequency,
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (_) {
+      setState(() {
+        _errorMessage = "Couldn't save your habit. Please try again.";
+        _isSaving = false;
+      });
+    }
   }
 
   @override
@@ -80,6 +89,13 @@ class _AddHabitSheetState extends ConsumerState<AddHabitSheet> {
             ),
           ),
           const SizedBox(height: 20),
+          if (_errorMessage != null) ...[
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: AppColors.danger, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+          ],
           KezaTextField(
             controller: _nameController,
             label: 'Habit name',

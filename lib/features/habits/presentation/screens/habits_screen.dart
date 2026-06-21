@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/presentation/widgets/keza_bottom_nav.dart';
+import '../../domain/models/habit.dart';
 import '../providers/habits_provider.dart';
 import '../widgets/habit_card.dart';
 import '../widgets/add_habit_sheet.dart';
@@ -16,7 +17,7 @@ class HabitsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final habits = ref.watch(habitsProvider);
+    final habitsState = ref.watch(habitsProvider);
     final notifier = ref.read(habitsProvider.notifier);
 
     return Scaffold(
@@ -25,27 +26,14 @@ class HabitsScreen extends ConsumerWidget {
         child: Column(
           children: [
             Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildHeader(context)),
-                  SliverToBoxAdapter(
-                    child: _buildSummary(
-                      notifier.completedCount,
-                      notifier.remainingCount,
-                      habits,
-                    ),
+              child: habitsState.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.moduleHabits,
                   ),
-                  SliverToBoxAdapter(child: _buildSectionLabel('Today')),
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate(
-                        _buildHabitCards(habits, notifier),
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                ],
+                ),
+                error: (error, _) => _buildError(context, notifier),
+                data: (habits) => _buildContent(context, habits, notifier),
               ),
             ),
             const KezaBottomNav(currentIndex: 0),
@@ -64,6 +52,66 @@ class HabitsScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+    );
+  }
+
+  Widget _buildError(BuildContext context, HabitsNotifier notifier) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            color: AppColors.midnightTextMuted,
+            size: 40,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "Couldn't load your habits",
+            style: TextStyle(
+              color: AppColors.midnightTextPrimary,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: notifier.loadHabits,
+            child: const Text(
+              'Try again',
+              style: TextStyle(color: AppColors.moduleHabits),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    List<Habit> habits,
+    HabitsNotifier notifier,
+  ) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeader(context)),
+        SliverToBoxAdapter(
+          child: _buildSummary(
+            notifier.completedCount,
+            notifier.remainingCount,
+            habits,
+          ),
+        ),
+        SliverToBoxAdapter(child: _buildSectionLabel('Today')),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(
+              _buildHabitCards(habits, notifier),
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
     );
   }
 
@@ -108,10 +156,10 @@ class HabitsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSummary(int completed, int remaining, List habits) {
+  Widget _buildSummary(int completed, int remaining, List<Habit> habits) {
     final bestStreak = habits.isEmpty
         ? 0
-        : habits.map((h) => h.streak as int).reduce((a, b) => a > b ? a : b);
+        : habits.map((h) => h.streak).reduce((a, b) => a > b ? a : b);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -153,7 +201,27 @@ class HabitsScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildHabitCards(List habits, HabitsNotifier notifier) {
+  List<Widget> _buildHabitCards(
+    List<Habit> habits,
+    HabitsNotifier notifier,
+  ) {
+    if (habits.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'No habits yet. Tap + to add your first one.',
+              style: TextStyle(
+                color: AppColors.midnightTextMuted,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
     final widgets = <Widget>[];
     for (var i = 0; i < habits.length; i++) {
       final habit = habits[i];
