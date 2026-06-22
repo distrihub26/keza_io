@@ -3,9 +3,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/presentation/widgets/keza_bottom_nav.dart';
+import '../../domain/models/goal.dart';
+import '../providers/goals_provider.dart';
 import '../widgets/goal_card.dart';
 import '../widgets/add_goal_sheet.dart';
 
@@ -15,25 +18,22 @@ class GoalsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final goalsState = ref.watch(goalsProvider);
+
     return Scaffold(
       backgroundColor: AppColors.midnightBackground,
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildHeader(context)),
-                  SliverToBoxAdapter(child: _buildVisionBanner()),
-                  SliverToBoxAdapter(child: _buildSectionLabel('Active goals')),
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate(_buildGoals()),
-                    ),
+              child: goalsState.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.moduleGoals,
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                ],
+                ),
+                error: (_, __) => _buildError(context, ref),
+                data: (goals) => _buildContent(context, goals),
               ),
             ),
             const KezaBottomNav(currentIndex: 0),
@@ -52,6 +52,54 @@ class GoalsScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+    );
+  }
+
+  Widget _buildError(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            color: AppColors.midnightTextMuted,
+            size: 40,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "Couldn't load your goals",
+            style: TextStyle(
+              color: AppColors.midnightTextPrimary,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => ref.read(goalsProvider.notifier).loadGoals(),
+            child: const Text(
+              'Try again',
+              style: TextStyle(color: AppColors.moduleGoals),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, List<Goal> goals) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeader(context)),
+        SliverToBoxAdapter(child: _buildVisionBanner()),
+        SliverToBoxAdapter(child: _buildSectionLabel('Active goals')),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(_buildGoalCards(goals)),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
     );
   }
 
@@ -112,7 +160,7 @@ class GoalsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Your 2026 vision',
+              'Your vision',
               style: TextStyle(
                 color: AppColors.moduleGoals,
                 fontSize: 12,
@@ -121,8 +169,8 @@ class GoalsScreen extends ConsumerWidget {
             ),
             SizedBox(height: 6),
             Text(
-              'Build KezaIO into a product used by 1,000 people. '
-              'Stay healthy. Read 24 books. Grow Jiamini.',
+              'Track what matters and let KezaIO connect your daily '
+              'life back to your bigger goals.',
               style: TextStyle(
                 color: AppColors.midnightTextPrimary,
                 fontSize: 14,
@@ -151,48 +199,50 @@ class GoalsScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildGoals() {
-    return const [
-      GoalCard(
-        emoji: '💼',
-        title: 'Launch KezaIO v1',
-        category: 'Career',
-        progress: 0.35,
-        deadline: 'Sep 2026',
-        milestones: 8,
-        completed: 3,
-      ),
-      SizedBox(height: 12),
-      GoalCard(
-        emoji: '📚',
-        title: 'Read 24 books',
-        category: 'Learning',
-        progress: 0.5,
-        deadline: 'Dec 2026',
-        milestones: 24,
-        completed: 12,
-      ),
-      SizedBox(height: 12),
-      GoalCard(
-        emoji: '💰',
-        title: 'Save KES 200,000',
-        category: 'Finance',
-        progress: 0.2,
-        deadline: 'Dec 2026',
-        milestones: 12,
-        completed: 2,
-      ),
-      SizedBox(height: 12),
-      GoalCard(
-        emoji: '🏃',
-        title: 'Run a half marathon',
-        category: 'Health',
-        progress: 0.6,
-        deadline: 'Aug 2026',
-        milestones: 5,
-        completed: 3,
-      ),
-    ];
+  List<Widget> _buildGoalCards(List<Goal> goals) {
+    if (goals.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'No goals yet. Tap + to set your first one.',
+              style: TextStyle(
+                color: AppColors.midnightTextMuted,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+    for (var i = 0; i < goals.length; i++) {
+      final goal = goals[i];
+      widgets.add(
+        GoalCard(
+          emoji: goal.emoji,
+          title: goal.title,
+          category: _capitalize(goal.category),
+          progress: goal.progress,
+          deadline: goal.deadline != null
+              ? DateFormat('MMM yyyy').format(goal.deadline!)
+              : 'No deadline',
+          milestones: goal.milestonesTotal,
+          completed: goal.milestonesCompleted,
+        ),
+      );
+      if (i != goals.length - 1) {
+        widgets.add(const SizedBox(height: 12));
+      }
+    }
+    return widgets;
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
   }
 }
 

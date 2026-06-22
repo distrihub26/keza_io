@@ -2,24 +2,27 @@
 // KezaIO - Your private AI life advisor
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../features/auth/presentation/widgets/keza_text_field.dart';
 import '../../../../features/auth/presentation/widgets/keza_primary_button.dart';
+import '../providers/goals_provider.dart';
 
 /// Bottom sheet for adding a new life goal.
-class AddGoalSheet extends StatefulWidget {
+class AddGoalSheet extends ConsumerStatefulWidget {
   const AddGoalSheet({super.key});
 
   @override
-  State<AddGoalSheet> createState() => _AddGoalSheetState();
+  ConsumerState<AddGoalSheet> createState() => _AddGoalSheetState();
 }
 
-class _AddGoalSheetState extends State<AddGoalSheet> {
+class _AddGoalSheetState extends ConsumerState<AddGoalSheet> {
   final _titleController = TextEditingController();
   final _visionController = TextEditingController();
   String _selectedEmoji = '🎯';
   String _selectedCategory = 'Career';
   bool _isSaving = false;
+  String? _errorMessage;
 
   static const List<String> _emojis = [
     '🎯', '💼', '📚', '💰', '🏃', '❤️',
@@ -40,10 +43,28 @@ class _AddGoalSheetState extends State<AddGoalSheet> {
 
   Future<void> _save() async {
     if (_titleController.text.trim().isEmpty) return;
-    setState(() => _isSaving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    Navigator.pop(context);
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await ref.read(goalsProvider.notifier).addGoal(
+            emoji: _selectedEmoji,
+            title: _titleController.text.trim(),
+            category: _selectedCategory,
+            vision: _visionController.text.trim().isEmpty
+                ? null
+                : _visionController.text.trim(),
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (_) {
+      setState(() {
+        _errorMessage = "Couldn't save your goal. Please try again.";
+        _isSaving = false;
+      });
+    }
   }
 
   @override
@@ -69,6 +90,13 @@ class _AddGoalSheetState extends State<AddGoalSheet> {
               ),
             ),
             const SizedBox(height: 20),
+            if (_errorMessage != null) ...[
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: AppColors.danger, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+            ],
             KezaTextField(
               controller: _titleController,
               label: 'Goal title',
