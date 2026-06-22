@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Jiamini Innovations Ltd. All rights reserved.
 // KezaIO - Your private AI life advisor
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/life_state.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/network/api_client.dart';
 import '../widgets/keza_primary_button.dart';
 
 /// Onboarding screen — user selects their current life state.
@@ -22,14 +24,29 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   LifeState? _selected;
   bool _isLoading = false;
+  String? _errorMessage;
 
   Future<void> _continue() async {
     if (_selected == null) return;
-    setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    context.go(AppRoutes.home);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await ApiClient.instance.post(
+        '/auth/onboarding/complete/',
+        data: {'life_state': _selected!.key},
+      );
+      if (!mounted) return;
+      context.go(AppRoutes.home);
+    } on DioException catch (_) {
+      setState(() {
+        _errorMessage = "Couldn't save that. Check your connection and try again.";
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -44,7 +61,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             children: [
               const SizedBox(height: 48),
               const _OnboardingHeader(),
-              const SizedBox(height: 36),
+              const SizedBox(height: 24),
+              if (_errorMessage != null) ...[
+                _ErrorBanner(message: _errorMessage!),
+                const SizedBox(height: 12),
+              ],
               Expanded(
                 child: ListView(
                   children: LifeState.values.map((state) {
@@ -76,6 +97,40 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.danger,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.danger, fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
